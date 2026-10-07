@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>Zebra PostPrint Test</title>
+
+<style>
+  body {
+    font: 16px -apple-system, BlinkMacSystemFont, sans-serif;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.4;
+  }
+
+  label {
+    display: block;
+    margin-top: 18px;
+    font-weight: 600;
+  }
+
+  input, button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 12px;
+    margin-top: 6px;
+    font: inherit;
+  }
+
+  button {
+    margin-top: 20px;
+  }
+
+  #log {
+    margin-top: 20px;
+    padding: 12px;
+    background: #eee;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    min-height: 150px;
+    font: 13px ui-monospace, monospace;
+  }
+</style>
+</head>
+
+<body>
+
+<h1>Zebra PostPrint Test</h1>
+
+<p>
+  This page sends a PDF directly from Safari to a Zebra
+  PostPrint HTTP endpoint.
+</p>
+
+<label for="url">Printer URL</label>
+<input
+  id="url"
+  type="url"
+  value="http://192.168.1.42/pstprnt"
+  autocapitalize="off"
+  autocomplete="off"
+  spellcheck="false">
+
+<label for="field">Multipart field name</label>
+<input
+  id="field"
+  value="file"
+  autocapitalize="off"
+  autocomplete="off"
+  spellcheck="false">
+
+<label for="pdf">PDF</label>
+<input
+  id="pdf"
+  type="file"
+  accept="application/pdf,.pdf">
+
+<button id="print">Send to printer</button>
+<button id="clear">Clear log</button>
+
+<pre id="log"></pre>
+
+<script>
+"use strict";
+
+const urlInput   = document.querySelector("#url");
+const fieldInput = document.querySelector("#field");
+const fileInput  = document.querySelector("#pdf");
+const printBtn   = document.querySelector("#print");
+const logBox     = document.querySelector("#log");
+
+let requestNumber = 0;
+
+function log(message) {
+  const time = new Date().toLocaleTimeString();
+  logBox.textContent += `[${time}] ${message}\n`;
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+printBtn.addEventListener("click", () => {
+  const file = fileInput.files[0];
+
+  if (!file) {
+    log("ERROR: Select a PDF first.");
+    return;
+  }
+
+  const url = urlInput.value.trim();
+  const fieldName = fieldInput.value.trim();
+
+  if (!url) {
+    log("ERROR: Enter a printer URL.");
+    return;
+  }
+
+  requestNumber++;
+  const n = requestNumber;
+
+  log(`--- Request ${n} ---`);
+  log(`Target: ${url}`);
+  log(`File: ${file.name}`);
+  log(`Size: ${file.size.toLocaleString()} bytes`);
+  log(`MIME type: ${file.type || "(not supplied)"}`);
+  log(`Form field: ${fieldName}`);
+
+  /*
+   * IMPORTANT:
+   *
+   * Do NOT specify Content-Type here.
+   *
+   * Safari will generate something like:
+   *
+   * Content-Type: multipart/form-data;
+   *     boundary=----WebKitFormBoundary...
+   *
+   * and use exactly the same boundary in the body.
+   */
+  const form = new FormData();
+
+  form.append(
+    fieldName,
+    file,
+    file.name || "label.pdf"
+  );
+
+  log("FormData constructed.");
+  log("Calling fetch()...");
+
+  let promise;
+
+  try {
+    promise = fetch(url, {
+      method: "POST",
+
+      /*
+       * Zebra doesn't provide CORS response headers
+       * and we don't need to inspect its response.
+       */
+      mode: "no-cors",
+
+      body: form
+    });
+  }
+  catch (error) {
+    /*
+     * A synchronous exception would be unusual,
+     * but report it separately.
+     */
+    log(`SYNCHRONOUS ERROR: ${error.name}: ${error.message}`);
+    return;
+  }
+
+  /*
+   * Getting here means fetch() accepted the request.
+   * It does NOT prove that bytes reached the printer.
+   */
+  log("fetch() accepted the request.");
+  log("Not waiting for the printer before returning control.");
+
+  /*
+   * We deliberately don't await this Promise.
+   *
+   * But observing it lets us discover whether Safari
+   * eventually resolves or rejects the operation.
+   */
+  promise.then(response => {
+    log(
+      `Request ${n}: fetch resolved ` +
+      `(type=${response.type}, status=${response.status}).`
+    );
+  }).catch(error => {
+    log(
+      `Request ${n}: fetch rejected: ` +
+      `${error.name}: ${error.message}`
+    );
+  });
+
+  log(`Request ${n}: JavaScript handler finished.`);
+});
+
+document.querySelector("#clear").addEventListener("click", () => {
+  logBox.textContent = "";
+});
+
+log(`Page origin: ${location.origin}`);
+log(`Secure context: ${window.isSecureContext}`);
+log("Ready.");
+</script>
+
+</body>
+</html>
