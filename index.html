@@ -4,57 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover">
-
-<title>Zebra PostPrint Test</title>
-
+<title>Zebra PostPrint Diagnostics</title>
 <style>
   body {
     font: 16px -apple-system, BlinkMacSystemFont, sans-serif;
-    max-width: 700px;
+    max-width: 800px;
     margin: 0 auto;
     padding: 20px;
     line-height: 1.4;
   }
-
+  h1, h2 {
+    margin-top: 28px;
+  }
   label {
     display: block;
-    margin-top: 18px;
+    margin-top: 16px;
     font-weight: 600;
   }
-
-  input, button {
+  input, button, textarea {
     box-sizing: border-box;
     width: 100%;
     padding: 12px;
     margin-top: 6px;
     font: inherit;
   }
-
   button {
-    margin-top: 20px;
+    margin-top: 12px;
   }
-
+  textarea {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    min-height: 100px;
+  }
+  #javascript {
+    min-height: 380px;
+  }
+  #curl {
+    min-height: 150px;
+  }
   #log {
-    margin-top: 20px;
+    margin-top: 10px;
     padding: 12px;
     background: #eee;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    min-height: 150px;
-    font: 13px ui-monospace, monospace;
+    min-height: 180px;
+    font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .note {
+    font-size: 14px;
+    opacity: 0.75;
   }
 </style>
 </head>
-
 <body>
-
-<h1>Zebra PostPrint Test</h1>
-
+<h1>Zebra PostPrint Diagnostics</h1>
 <p>
-  This page sends a PDF directly from Safari to a Zebra
-  PostPrint HTTP endpoint.
+Tests direct HTTP access from this HTTPS Safari page to a Zebra
+printer on the local network.
 </p>
-
 <label for="url">Printer URL</label>
 <input
   id="url"
@@ -63,7 +71,6 @@
   autocapitalize="off"
   autocomplete="off"
   spellcheck="false">
-
 <label for="field">Multipart field name</label>
 <input
   id="field"
@@ -71,144 +78,316 @@
   autocapitalize="off"
   autocomplete="off"
   spellcheck="false">
-
 <label for="pdf">PDF</label>
 <input
   id="pdf"
   type="file"
   accept="application/pdf,.pdf">
-
-<button id="print">Send to printer</button>
-<button id="clear">Clear log</button>
-
+<h2>Tests</h2>
+<button id="getTest">
+  Test simple HTTP GET
+</button>
+<button id="postTest">
+  Send PDF using PostPrint
+</button>
+<button id="permissionTest">
+  Query Local Network permission
+</button>
+<h2>cURL equivalent</h2>
+<button id="makeCurl">
+  Generate cURL command
+</button>
+<textarea
+  id="curl"
+  readonly
+  spellcheck="false"
+  placeholder="Generated cURL command will appear here..."
+></textarea>
+<p class="note">
+The cURL command uses cURL's own multipart encoder. cURL will
+generate the multipart boundary automatically, just as Safari
+does when FormData is used.
+</p>
+<h2>Editable JavaScript</h2>
+<p class="note">
+Edit this code directly on the iPad, then press Run. The
+functions log(), printerUrl(), selectedFile() and fieldName()
+are available to it.
+</p>
+<textarea id="javascript" spellcheck="false">
+const url = printerUrl();
+log("Custom test starting");
+log("Target: " + url);
+fetch(url, {
+    method: "GET",
+    mode: "no-cors"
+})
+.then(response => {
+    log(
+        "Custom GET resolved: " +
+        "type=" + response.type +
+        ", status=" + response.status
+    );
+})
+.catch(error => {
+    log(
+        "Custom GET rejected: " +
+        error.name + ": " + error.message
+    );
+});
+log("fetch() called; JavaScript continues.");
+</textarea>
+<button id="runJavascript">
+  Run JavaScript
+</button>
+<h2>Log</h2>
+<button id="clearLog">Clear log</button>
 <pre id="log"></pre>
-
 <script>
 "use strict";
-
 const urlInput   = document.querySelector("#url");
 const fieldInput = document.querySelector("#field");
 const fileInput  = document.querySelector("#pdf");
-const printBtn   = document.querySelector("#print");
 const logBox     = document.querySelector("#log");
-
+const curlBox    = document.querySelector("#curl");
+const jsBox      = document.querySelector("#javascript");
 let requestNumber = 0;
-
 function log(message) {
   const time = new Date().toLocaleTimeString();
-  logBox.textContent += `[${time}] ${message}\n`;
+  logBox.textContent +=
+    `[${time}] ${String(message)}\n`;
   logBox.scrollTop = logBox.scrollHeight;
 }
-
-printBtn.addEventListener("click", () => {
-  const file = fileInput.files[0];
-
+function printerUrl() {
+  return urlInput.value.trim();
+}
+function fieldName() {
+  return fieldInput.value.trim();
+}
+function selectedFile() {
+  return fileInput.files[0] || null;
+}
+/*
+ * TEST 1
+ *
+ * Simplest possible request to the printer.
+ *
+ * If this produces the same immediate "Load failed" as the
+ * POST, multipart encoding is not the cause.
+ */
+document.querySelector("#getTest")
+.addEventListener("click", () => {
+  const url = printerUrl();
+  log("--- Simple GET test ---");
+  log("Target: " + url);
+  try {
+    const promise = fetch(url, {
+      method: "GET",
+      mode: "no-cors"
+    });
+    log("fetch() accepted GET.");
+    promise.then(response => {
+      log(
+        "GET resolved: " +
+        "type=" + response.type +
+        ", status=" + response.status
+      );
+    })
+    .catch(error => {
+      log(
+        "GET rejected: " +
+        error.name + ": " + error.message
+      );
+    });
+  } catch (error) {
+    log(
+      "GET synchronous error: " +
+      error.name + ": " + error.message
+    );
+  }
+});
+/*
+ * TEST 2
+ *
+ * Zebra PostPrint request.
+ *
+ * IMPORTANT:
+ * Do NOT manually set Content-Type.
+ *
+ * Safari will generate:
+ *
+ * multipart/form-data; boundary=...
+ *
+ * including the matching boundary in the request body.
+ */
+document.querySelector("#postTest")
+.addEventListener("click", () => {
+  const file = selectedFile();
   if (!file) {
     log("ERROR: Select a PDF first.");
     return;
   }
-
-  const url = urlInput.value.trim();
-  const fieldName = fieldInput.value.trim();
-
-  if (!url) {
-    log("ERROR: Enter a printer URL.");
-    return;
-  }
-
+  const url = printerUrl();
   requestNumber++;
   const n = requestNumber;
-
-  log(`--- Request ${n} ---`);
-  log(`Target: ${url}`);
-  log(`File: ${file.name}`);
-  log(`Size: ${file.size.toLocaleString()} bytes`);
-  log(`MIME type: ${file.type || "(not supplied)"}`);
-  log(`Form field: ${fieldName}`);
-
-  /*
-   * IMPORTANT:
-   *
-   * Do NOT specify Content-Type here.
-   *
-   * Safari will generate something like:
-   *
-   * Content-Type: multipart/form-data;
-   *     boundary=----WebKitFormBoundary...
-   *
-   * and use exactly the same boundary in the body.
-   */
+  log(`--- POST request ${n} ---`);
+  log("Target: " + url);
+  log("File: " + file.name);
+  log("Size: " + file.size + " bytes");
+  log("Field: " + fieldName());
   const form = new FormData();
-
   form.append(
-    fieldName,
+    fieldName(),
     file,
     file.name || "label.pdf"
   );
-
   log("FormData constructed.");
   log("Calling fetch()...");
-
-  let promise;
-
   try {
-    promise = fetch(url, {
+    const promise = fetch(url, {
       method: "POST",
-
-      /*
-       * Zebra doesn't provide CORS response headers
-       * and we don't need to inspect its response.
-       */
       mode: "no-cors",
-
       body: form
     });
-  }
-  catch (error) {
-    /*
-     * A synchronous exception would be unusual,
-     * but report it separately.
-     */
-    log(`SYNCHRONOUS ERROR: ${error.name}: ${error.message}`);
-    return;
-  }
-
-  /*
-   * Getting here means fetch() accepted the request.
-   * It does NOT prove that bytes reached the printer.
-   */
-  log("fetch() accepted the request.");
-  log("Not waiting for the printer before returning control.");
-
-  /*
-   * We deliberately don't await this Promise.
-   *
-   * But observing it lets us discover whether Safari
-   * eventually resolves or rejects the operation.
-   */
-  promise.then(response => {
+    log("fetch() accepted POST.");
+    log("JavaScript is NOT awaiting the response.");
+    promise.then(response => {
+      log(
+        `POST ${n} resolved: ` +
+        `type=${response.type}, ` +
+        `status=${response.status}`
+      );
+    })
+    .catch(error => {
+      log(
+        `POST ${n} rejected: ` +
+        `${error.name}: ${error.message}`
+      );
+    });
+  } catch (error) {
     log(
-      `Request ${n}: fetch resolved ` +
-      `(type=${response.type}, status=${response.status}).`
-    );
-  }).catch(error => {
-    log(
-      `Request ${n}: fetch rejected: ` +
+      `POST ${n} synchronous error: ` +
       `${error.name}: ${error.message}`
     );
-  });
-
-  log(`Request ${n}: JavaScript handler finished.`);
+  }
 });
-
-document.querySelector("#clear").addEventListener("click", () => {
+/*
+ * TEST 3
+ *
+ * Probe Safari's Permissions API.
+ *
+ * Some Safari/WebKit versions won't recognise the
+ * "local-network" permission descriptor. That's itself
+ * useful diagnostic information.
+ */
+document.querySelector("#permissionTest")
+.addEventListener("click", async () => {
+  log("--- Local Network permission test ---");
+  if (!navigator.permissions) {
+    log("navigator.permissions is unavailable.");
+    return;
+  }
+  try {
+    const result =
+      await navigator.permissions.query({
+        name: "local-network"
+      });
+    log(
+      "local-network permission state: " +
+      result.state
+    );
+  } catch (error) {
+    log(
+      "Permission query rejected: " +
+      error.name + ": " + error.message
+    );
+  }
+});
+/*
+ * Generate an equivalent cURL command.
+ *
+ * NOTE:
+ *
+ * Safari's multipart boundary isn't available to us here.
+ * That's fine: cURL's -F option creates its own valid
+ * multipart/form-data request and generates its own boundary.
+ *
+ * The local filename is illustrative because another HTTP
+ * client won't have access to Safari's selected File object.
+ */
+document.querySelector("#makeCurl")
+.addEventListener("click", () => {
+  const file = selectedFile();
+  const filename =
+    file ? file.name : "label.pdf";
+  const safeUrl =
+    printerUrl().replace(/'/g, "'\\''");
+  const safeField =
+    fieldName().replace(/'/g, "'\\''");
+  const safeFilename =
+    filename.replace(/'/g, "'\\''");
+  const command =
+`curl -v \\
+  -X POST \\
+  -F '${safeField}=@${safeFilename};type=application/pdf' \\
+  '${safeUrl}'`;
+  curlBox.value = command;
+  log("Generated cURL command.");
+  log(
+    "Select the same PDF in your HTTP client " +
+    "when reproducing this request."
+  );
+});
+/*
+ * Editable JavaScript runner.
+ *
+ * This deliberately uses AsyncFunction so that custom tests
+ * can use await if desired.
+ */
+document.querySelector("#runJavascript")
+.addEventListener("click", async () => {
+  log("--- Running editable JavaScript ---");
+  try {
+    const AsyncFunction =
+      Object.getPrototypeOf(
+        async function () {}
+      ).constructor;
+    const fn = new AsyncFunction(
+      "log",
+      "printerUrl",
+      "selectedFile",
+      "fieldName",
+      jsBox.value
+    );
+    await fn(
+      log,
+      printerUrl,
+      selectedFile,
+      fieldName
+    );
+    log("Custom JavaScript finished.");
+  } catch (error) {
+    log(
+      "Custom JavaScript error: " +
+      error.name + ": " + error.message
+    );
+    if (error.stack) {
+      log(error.stack);
+    }
+  }
+});
+document.querySelector("#clearLog")
+.addEventListener("click", () => {
   logBox.textContent = "";
 });
-
-log(`Page origin: ${location.origin}`);
-log(`Secure context: ${window.isSecureContext}`);
+/*
+ * Initial diagnostics.
+ */
+log("Page origin: " + location.origin);
+log("Protocol: " + location.protocol);
+log("Secure context: " + window.isSecureContext);
+log("User agent: " + navigator.userAgent);
 log("Ready.");
 </script>
-
 </body>
 </html>
